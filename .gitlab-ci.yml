@@ -1,0 +1,61 @@
+stages: [verify, plan, deploy]
+
+.railway:
+  image: node:24-bookworm
+  before_script:
+    - npm install --global @railway/cli@5.71.0
+    - npm ci --prefix .railway
+
+railway_validate:
+  stage: verify
+  image: node:24-bookworm
+  script:
+    - npm ci --prefix .railway
+    - npm --prefix .railway run check
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+railway_plan_production:
+  extends: .railway
+  stage: plan
+  environment:
+    name: production
+    action: prepare
+  script:
+    - railway config plan --environment production --out .railway/production.plan
+  artifacts:
+    access: maintainer
+    expire_in: 1 day
+    paths:
+      - .railway/production.plan
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+
+railway_production:
+  extends: .railway
+  stage: deploy
+  needs: [railway_validate, railway_plan_production]
+  resource_group: railway-production
+  environment:
+    name: production
+    url: https://keycloak-production-2d75.up.railway.app
+  script:
+    - |
+      node --input-type=module <<'JS'
+      import { execFileSync } from "node:child_process";
+      const { environmentId, iacPartials } = JSON.parse(execFileSync("railway", [
+        "config", "partials", "list", "--json",
+      ], { encoding: "utf8" }));
+      const addresses = ["service.Keycloak", "database.Postgres", "volume.postgres-volume-3Qq_", "group.Keycloak"];
+      if (environmentId !== "a1475191-2f61-4a8c-9220-f6498a6b3a3e" ||
+          addresses.some(address => iacPartials?.[address] !== "keycloak")) {
+        throw new Error("Complete production Keycloak IaC adoption before deploying.");
+      }
+      JS
+    - railway config apply --plan .railway/production.plan --yes
+    - node .railway/deploy.ts
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+  allow_failure: false

@@ -1,4 +1,4 @@
-import { database, defineRailway, github, group, preserve, project, service, volume } from "railway/iac";
+import { database, defineRailway, group, preserve, project, service, volume } from "railway/iac";
 
 export const partial = "keycloak";
 
@@ -16,7 +16,6 @@ export default defineRailway((ctx) => {
   Postgres.networking = { privateNetworkEndpoint: "postgres-2ebc" };
   const postgresData = volume("postgres-volume-3Qq_", { alerts: { usage: { "100": {}, "80": {}, "95": {} } }, allowOnlineResize: true, region: "us-east4-eqdc4a", sizeMB: 500 });
   const Keycloak = service("Keycloak", {
-    source: github("krislefeber/keycloak-docker", { branch: "main", checkSuites: false }),
     build: { buildEnvironment: "V3", builder: "RAILPACK" },
     start: "/opt/keycloak/bin/kc.sh start --features=quick-theme",
     healthcheck: "/resources/master/admin/en",
