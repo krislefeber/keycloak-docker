@@ -41,20 +41,9 @@ railway_production:
     name: production
     url: https://keycloak-production-2d75.up.railway.app
   script:
-    - |
-      node --input-type=module <<'JS'
-      import { execFileSync } from "node:child_process";
-      const { environmentId, iacPartials } = JSON.parse(execFileSync("railway", [
-        "config", "partials", "list", "--json",
-      ], { encoding: "utf8" }));
-      const addresses = ["service.Keycloak", "database.Postgres", "volume.postgres-volume-3Qq_", "group.Keycloak"];
-      if (environmentId !== "a1475191-2f61-4a8c-9220-f6498a6b3a3e" ||
-          addresses.some(address => iacPartials?.[address] !== "keycloak")) {
-        throw new Error("Complete production Keycloak IaC adoption before deploying.");
-      }
-      JS
+    - node .railway/deploy.ts production --check-ownership
     - railway config apply --plan .railway/production.plan --yes
-    - node .railway/deploy.ts
+    - node .railway/deploy.ts production
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
       when: manual

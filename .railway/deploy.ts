@@ -1,14 +1,37 @@
 import { execFileSync } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
 
+const [environment, option, ...extraArgs] = process.argv.slice(2);
+if (environment !== "production" || (option !== undefined && option !== "--check-ownership") || extraArgs.length) {
+  throw new Error("Usage: node .railway/deploy.ts production [--check-ownership]");
+}
+
 const revision = process.env.CI_COMMIT_SHA;
 if (process.env.GITLAB_CI !== "true" || process.env.CI_COMMIT_REF_PROTECTED !== "true" || !revision) {
   throw new Error("Run this from the protected GitLab production job.");
 }
 
+const productionEnvironmentId = "a1475191-2f61-4a8c-9220-f6498a6b3a3e";
+if (option === "--check-ownership") {
+  const { environmentId, iacPartials } = JSON.parse(execFileSync("railway", [
+    "config", "partials", "list", "--json",
+  ], { encoding: "utf8" })) as { environmentId?: string; iacPartials?: Record<string, string> };
+  const requiredResources = [
+    "service.Keycloak",
+    "database.Postgres",
+    "volume.postgres-volume-3Qq_",
+    "group.Keycloak",
+  ];
+  if (environmentId !== productionEnvironmentId ||
+      requiredResources.some(address => iacPartials?.[address] !== "keycloak")) {
+    throw new Error("Complete production Keycloak IaC adoption before deploying.");
+  }
+  process.exit(0);
+}
+
 const target = [
   "--project", "185fc133-0498-45ad-af01-2e4fb6705a62",
-  "--environment", "a1475191-2f61-4a8c-9220-f6498a6b3a3e",
+  "--environment", productionEnvironmentId,
   "--service", "1ac8e8ed-404f-43a4-93de-ebfe64dd5983",
 ];
 const upload = JSON.parse(execFileSync("railway", [
